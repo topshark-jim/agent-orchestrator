@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback, type FormEvent } from "react";
+import Link from "next/link";
 import {
   type DashboardSession,
   type DashboardStats,
@@ -226,7 +227,7 @@ export function Dashboard({
         </div>
         <div className="flex items-center gap-3">
           {orchestratorId && (
-            <a
+            <Link
               href={`/sessions/${encodeURIComponent(orchestratorId)}`}
               className="orchestrator-btn flex items-center gap-2 rounded-[7px] px-4 py-2 text-[12px] font-semibold hover:no-underline"
             >
@@ -241,7 +242,7 @@ export function Dashboard({
               >
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
               </svg>
-            </a>
+            </Link>
           )}
         </div>
       </div>
