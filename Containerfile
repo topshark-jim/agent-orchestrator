@@ -66,3 +66,4 @@ VOLUME ["/root/.agent-orchestrator", "/projects"]
 ENV AO_CONFIG_PATH=/projects/agent-orchestrator.yaml
 
 ENTRYPOINT [ "/usr/local/bin/ao" ]
+CMD [ "start" ]

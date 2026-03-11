@@ -524,7 +524,36 @@ describe("start command — URL argument", () => {
       .mocked(console.log)
       .mock.calls.map((c) => c.join(" "))
       .join("\n");
-    expect(output).toContain(`Config generated: ${outputConfig}`);
+    expect(output).toContain(`Config: ${outputConfig}`);
+  });
+
+  it("creates AO_CONFIG_PATH parent directory before writing generated config", async () => {
+    const repoDir = join(tmpDir, "agent-sandbox");
+    const outputConfig = join(tmpDir, "nested", "projects", "agent-orchestrator.yaml");
+    mockCwd(tmpDir);
+    process.env["AO_CONFIG_PATH"] = outputConfig;
+
+    mockExecSilent.mockResolvedValue("Logged in");
+    mockExec.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === "gh" && args[0] === "repo" && args[1] === "clone") {
+        createFakeRepo(repoDir, "https://github.com/zvictor/agent-sandbox.git", {
+          "package.json": "{}",
+        });
+      }
+      return { stdout: "", stderr: "" };
+    });
+
+    await program.parseAsync([
+      "node",
+      "test",
+      "start",
+      "https://github.com/zvictor/agent-sandbox",
+      "--no-dashboard",
+      "--no-orchestrator",
+    ]);
+
+    expect(existsSync(join(tmpDir, "nested", "projects"))).toBe(true);
+    expect(existsSync(outputConfig)).toBe(true);
   });
 
   it("resolves correct project when existing config has multiple projects", async () => {
