@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useReducer } from "react";
-import type { DashboardSession, SSESnapshotEvent } from "@/lib/types";
+import { useEffect, useReducer, useRef } from "react";
+import type { DashboardSession, SSESnapshotEvent, GlobalPauseState } from "@/lib/types";
 import { apiPath } from "@/lib/api-path";
 
+interface State {
+  sessions: DashboardSession[];
+  globalPause: GlobalPauseState | null;
+}
+
 type Action =
-  | { type: "reset"; sessions: DashboardSession[] }
+  | { type: "reset"; sessions: DashboardSession[]; globalPause: GlobalPauseState | null }
   | { type: "snapshot"; patches: SSESnapshotEvent["sessions"] };
 
-function reducer(state: DashboardSession[], action: Action): DashboardSession[] {
+function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "reset":
-      return action.sessions;
+      return { sessions: action.sessions, globalPause: action.globalPause };
     case "snapshot": {
       const patchMap = new Map(action.patches.map((p) => [p.id, p]));
       let changed = false;
-      const next = state.map((s) => {
+      const next = state.sessions.map((s) => {
         const patch = patchMap.get(s.id);
         if (!patch) return s;
         if (
@@ -33,18 +38,34 @@ function reducer(state: DashboardSession[], action: Action): DashboardSession[] 
           lastActivityAt: patch.lastActivityAt,
         };
       });
-      return changed ? next : state;
+      return changed ? { ...state, sessions: next } : state;
     }
   }
 }
 
-export function useSessionEvents(initialSessions: DashboardSession[]): DashboardSession[] {
-  const [sessions, dispatch] = useReducer(reducer, initialSessions);
+interface UseSessionEventsReturn {
+  sessions: DashboardSession[];
+  globalPause: GlobalPauseState | null;
+}
 
-  // Reset state when server-rendered props change (e.g. full page refresh)
+export function useSessionEvents(
+  initialSessions: DashboardSession[],
+  initialGlobalPause: GlobalPauseState | null,
+): UseSessionEventsReturn {
+  const [state, dispatch] = useReducer(reducer, {
+    sessions: initialSessions,
+    globalPause: initialGlobalPause,
+  });
+  const sessionsRef = useRef(state.sessions);
+  const refreshingRef = useRef(false);
+
   useEffect(() => {
-    dispatch({ type: "reset", sessions: initialSessions });
-  }, [initialSessions]);
+    sessionsRef.current = state.sessions;
+  }, [state.sessions]);
+
+  useEffect(() => {
+    dispatch({ type: "reset", sessions: initialSessions, globalPause: initialGlobalPause });
+  }, [initialSessions, initialGlobalPause]);
 
   useEffect(() => {
     const es = new EventSource(apiPath("/api/events"));
@@ -55,6 +76,34 @@ export function useSessionEvents(initialSessions: DashboardSession[]): Dashboard
         if (data.type === "snapshot") {
           const snapshot = data as SSESnapshotEvent;
           dispatch({ type: "snapshot", patches: snapshot.sessions });
+
+          const currentIds = new Set(sessionsRef.current.map((s) => s.id));
+          const snapshotIds = new Set(snapshot.sessions.map((s) => s.id));
+          const sameMembership =
+            currentIds.size === snapshotIds.size &&
+            [...snapshotIds].every((id) => currentIds.has(id));
+
+          if (!sameMembership && !refreshingRef.current) {
+            refreshingRef.current = true;
+            void fetch(apiPath("/api/sessions"))
+              .then((res) => (res.ok ? res.json() : null))
+              .then(
+                (
+                  payload: { sessions?: DashboardSession[]; globalPause?: GlobalPauseState } | null,
+                ) => {
+                  if (payload?.sessions) {
+                    dispatch({
+                      type: "reset",
+                      sessions: payload.sessions,
+                      globalPause: payload.globalPause ?? null,
+                    });
+                  }
+                },
+              )
+              .finally(() => {
+                refreshingRef.current = false;
+              });
+          }
         }
       } catch {
         // Ignore malformed messages
@@ -70,5 +119,5 @@ export function useSessionEvents(initialSessions: DashboardSession[]): Dashboard
     };
   }, []);
 
-  return sessions;
+  return { sessions: state.sessions, globalPause: state.globalPause };
 }

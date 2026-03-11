@@ -7,6 +7,7 @@ import {
   type DashboardStats,
   type DashboardPR,
   type AttentionLevel,
+  type GlobalPauseState,
   getAttentionLevel,
   isPRRateLimited,
 } from "@/lib/types";
@@ -22,12 +23,20 @@ interface DashboardProps {
   stats: DashboardStats;
   orchestratorId?: string | null;
   projectName?: string;
+  initialGlobalPause?: GlobalPauseState | null;
+  projectIds?: string[];
 }
 
 const KANBAN_LEVELS = ["working", "pending", "review", "respond", "merge"] as const;
 
-export function Dashboard({ initialSessions, stats, orchestratorId, projectName }: DashboardProps) {
-  const sessions = useSessionEvents(initialSessions);
+export function Dashboard({
+  initialSessions,
+  stats: _stats,
+  orchestratorId,
+  projectName,
+  initialGlobalPause,
+}: DashboardProps) {
+  const { sessions, globalPause } = useSessionEvents(initialSessions, initialGlobalPause ?? null);
   const [rateLimitDismissed, setRateLimitDismissed] = useState(false);
   const grouped = useMemo(() => {
     const zones: Record<AttentionLevel, DashboardSession[]> = {
@@ -96,6 +105,19 @@ export function Dashboard({ initialSessions, stats, orchestratorId, projectName 
     [sessions],
   );
 
+  const liveStats = useMemo<DashboardStats>(
+    () => ({
+      totalSessions: sessions.length,
+      workingSessions: sessions.filter((s) => s.activity !== null && s.activity !== "exited")
+        .length,
+      openPRs: sessions.filter((s) => s.pr?.state === "open").length,
+      needsReview: sessions.filter(
+        (s) => s.pr && !s.pr.isDraft && s.pr.reviewDecision === "pending",
+      ).length,
+    }),
+    [sessions],
+  );
+
   return (
     <div className="px-8 py-7">
       <DynamicFavicon sessions={sessions} projectName={projectName} />
@@ -105,7 +127,7 @@ export function Dashboard({ initialSessions, stats, orchestratorId, projectName 
           <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
             Orchestrator
           </h1>
-          <StatusLine stats={stats} />
+          <StatusLine stats={liveStats} />
         </div>
         {orchestratorId && (
           <Link
@@ -126,6 +148,14 @@ export function Dashboard({ initialSessions, stats, orchestratorId, projectName 
           </Link>
         )}
       </div>
+
+      {globalPause && (
+        <div className="mb-6 rounded border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.07)] px-3.5 py-2.5 text-[11px] text-[var(--color-status-attention)]">
+          <span className="font-semibold">Orchestrator paused:</span> {globalPause.reason}. Resume
+          after {new Date(globalPause.pausedUntil).toLocaleString()}.
+          {globalPause.sourceSessionId ? ` Source: ${globalPause.sourceSessionId}.` : ""}
+        </div>
+      )}
 
       {/* Rate limit notice */}
       {anyRateLimited && !rateLimitDismissed && (
