@@ -1,7 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { writeFileSync, existsSync } from "node:fs";
 import { resolve, basename } from "node:path";
-import { cwd } from "node:process";
 import { stringify as yamlStringify } from "yaml";
 import chalk from "chalk";
 import type { Command } from "commander";
@@ -22,7 +21,7 @@ function defaultProjectBaseDir(): string {
     return resolve(resolved, "..");
   }
 
-  const workingDir = cwd();
+  const workingDir = process.cwd();
   if (workingDir === "/projects" || workingDir.startsWith("/projects/")) {
     return "/projects";
   }
@@ -32,7 +31,8 @@ function defaultProjectBaseDir(): string {
 
 function defaultProjectPath(projectId: string, repo?: string): string {
   const repoName = repo?.split("/").pop()?.trim();
-  const leaf = repoName || projectId || "my-project";
+  const hasPlaceholderRepo = !repo || repo === "owner/repo";
+  const leaf = hasPlaceholderRepo ? projectId || "my-project" : repoName || projectId || "my-project";
   const baseDir = defaultProjectBaseDir();
   if (baseDir === "~") {
     return `~/${leaf}`;
@@ -197,7 +197,7 @@ export function registerInit(program: Command): void {
       console.log(chalk.bold.cyan("\n  Agent Orchestrator — Setup Wizard\n"));
       console.log(chalk.dim("  Detecting environment...\n"));
 
-      const workingDir = cwd();
+      const workingDir = process.cwd();
       const env = await detectEnvironment(workingDir);
 
       // Show detection results
@@ -422,7 +422,7 @@ export function registerInit(program: Command): void {
 }
 
 async function handleAutoMode(outputPath: string, smart: boolean): Promise<void> {
-  const workingDir = cwd();
+  const workingDir = process.cwd();
 
   console.log(chalk.bold.cyan("\n  Agent Orchestrator — Auto Setup\n"));
 
@@ -472,7 +472,11 @@ async function handleAutoMode(outputPath: string, smart: boolean): Promise<void>
   const projectId = env.isGitRepo ? basename(workingDir) : "my-project";
   const repo = env.ownerRepo || "owner/repo";
   const hasPlaceholderRepo = repo === "owner/repo";
-  const path = env.isGitRepo ? workingDir : defaultProjectPath(projectId, repo);
+  const path = process.env["AO_CONFIG_PATH"]
+    ? defaultProjectPath(projectId, repo)
+    : env.isGitRepo
+      ? workingDir
+      : defaultProjectPath(projectId, repo);
   const defaultBranch = env.defaultBranch || "main";
 
   const port = await findFreePort(DEFAULT_PORT);

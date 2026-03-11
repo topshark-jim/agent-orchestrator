@@ -7,7 +7,7 @@ title = "Agent Orchestrator Secret Scanning"
 [extend]
 useDefault = true
 
-# Allowlist to ignore false positives
+# Allowlist to ignore false positives and explicitly-reviewed historical findings
 [allowlist]
 description = "Allowlisted patterns"
 
@@ -21,10 +21,16 @@ paths = [
 
 regexes = [
   # Environment variable references
-  "\\$\\{[A-Z_]+\\}",
+  '$\{[A-Z_]+\}',
 
   # Placeholder values
   "your-api-key-here",
   "your-token-here",
-  "example\\.com",
+  'example\.com',
+]
+
+commits = [
+  # Historical openclaw notifier token in agent-orchestrator.yaml; rotated and kept
+  # here only so full-history CI scans can pass while still scanning current work.
+  "0393ab70a83e090883895d2168aa39a76f997ec8",
 ]
